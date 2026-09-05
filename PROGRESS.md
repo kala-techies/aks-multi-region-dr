@@ -32,21 +32,10 @@ Summary of what exists in the repo:
 ## Current blockers (in order of what to resolve first)
 1. **AD-001 (app scope) is still an assumption**, never confirmed by the user. If a specific application/tech stack was expected (e.g. for a course rubric), this needs to be swapped before anything is deployed.
 2. **AD-005's vCPU quota risk is unresolved, and deliberately not checked from this session.** Azure CLI was installed and `az login --use-device-code` was started, but the user declined to authenticate this session against their Azure account (a reasonable call — this session's environment is not somewhere they'd chosen to place Azure credentials). The login was not completed; no Azure session exists here. **The user will run the quota check themselves** (`az vm list-usage --location westeurope -o table` and the same for `northeurope`) before any `terraform apply`. Azure CLI remains installed on this machine for when they're ready to do that here, or they may check from elsewhere.
-3. **This session's changes are not committed or pushed, by the user's choice.** Git identity (`user.name`/`user.email`) is not configured in this repo, and per a hard rule Claude does not run `git config` itself. The user chose to skip committing/pushing for now rather than set it up mid-session. Everything is staged (`git add -A` was run) but sitting as uncommitted local changes — see "To commit and push later" below.
-4. Docker is not installed in this execution environment, so Phase 3's container build could not be run end-to-end here — see `docs/troubleshooting.md` for what was attempted and why it stopped where it did.
+3. Docker is not installed in this execution environment, so Phase 3's container build could not be run end-to-end here — see `docs/troubleshooting.md` for what was attempted and why it stopped where it did.
 
-## To commit and push later (whenever the user is ready)
-```bash
-cd path/to/aks-multi-region-dr
-git config user.name "shaik kalandar"
-git config user.email "shaik.kalandar20@gmail.com"
-git add -A
-git commit -m "Initial AKS multi-region DR POC: app, Terraform, Helm, CI/CD, docs"
-git push -u origin main
-```
-Note: the user asked that this commit/push carry only their own authorship
-("push it like I did it, not claude") — no Co-Authored-By trailer should be
-added, notwithstanding this session's default attribution instructions.
+## Git status
+Initial commit `f1ad880` ("Initial AKS multi-region DR POC: app, Terraform, Helm, CI/CD, docs") created and pushed to `origin/main` (`kala-techies/aks-multi-region-dr`) on 2026-09-05. Authored solely by `shaik kalandar <shaik.kalandar20@gmail.com>` — no AI co-authorship trailer, per the user's explicit standing preference across all their repos. `ci.yml` should now run for real on GitHub Actions against this push; `cd.yml` still needs the one-time OIDC/environment setup in `docs/github-oidc-setup.md` before it can be used.
 
 ## Known issues
 - PostgreSQL uses public network access + a broad `AllowAzureServices` firewall rule (AD-003) — documented, not hidden; top item in `docs/production-hardening.md`.
