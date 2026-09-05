@@ -1,0 +1,9 @@
+# Example region overrides for the secondary (North Europe) release.
+# Fill in image.repository (ACR login server) and service.loadBalancerIP /
+# service.resourceGroup from `terraform output` before using this file.
+
+region: "northeurope"
+
+service:
+  loadBalancerIP: ""    # terraform output secondary_ingress_ip
+  resourceGroup: ""     # terraform output -json | AKS node resource group

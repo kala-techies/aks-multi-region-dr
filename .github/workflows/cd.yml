@@ -1,0 +1,176 @@
+name: CD (manual, gated)
+
+# IMPORTANT: This workflow can create/modify real Azure resources and push
+# real container images. It is intentionally workflow_dispatch-only (no
+# automatic trigger on push) and every job that touches Azure targets a
+# GitHub Environment that must have required reviewers configured in the
+# repository's Settings -> Environments before this will actually run
+# unattended. See docs/github-oidc-setup.md for the one-time setup this
+# workflow depends on (federated credentials, environments, variables).
+#
+# Per this project's own rules: do not run the "apply" or "deploy" jobs
+# until the human owner has explicitly said to proceed with the Azure
+# deployment for this change.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "What to run"
+        required: true
+        type: choice
+        options:
+          - plan-only
+          - apply
+          - build-and-push-image
+          - deploy-app
+
+permissions:
+  contents: read
+
+env:
+  TF_WORKING_DIR: terraform/envs/dr-poc
+
+jobs:
+  terraform-plan:
+    name: Terraform plan
+    if: ${{ inputs.action == 'plan-only' || inputs.action == 'apply' }}
+    runs-on: ubuntu-latest
+    environment: infra-plan
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: terraform init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init -input=false
+
+      - name: terraform plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        env:
+          TF_VAR_postgres_administrator_password: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
+        run: terraform plan -input=false -out=tfplan
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: ${{ env.TF_WORKING_DIR }}/tfplan
+          retention-days: 5
+
+  terraform-apply:
+    name: Terraform apply (requires environment approval)
+    if: ${{ inputs.action == 'apply' }}
+    needs: terraform-plan
+    runs-on: ubuntu-latest
+    # This environment MUST have required reviewers configured - this is
+    # the human-approval gate for a real infrastructure change (project
+    # rule 18). Do not remove protection rules from this environment.
+    environment: infra-apply
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: ${{ env.TF_WORKING_DIR }}
+
+      - name: terraform init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init -input=false
+
+      - name: terraform apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform apply -input=false -auto-approve tfplan
+
+  build-and-push-image:
+    name: Build and push image to ACR
+    if: ${{ inputs.action == 'build-and-push-image' }}
+    runs-on: ubuntu-latest
+    environment: infra-plan
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: az acr login
+        run: az acr login --name ${{ vars.ACR_NAME }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: app
+          push: true
+          tags: |
+            ${{ vars.ACR_LOGIN_SERVER }}/notes-api:${{ github.sha }}
+            ${{ vars.ACR_LOGIN_SERVER }}/notes-api:latest
+
+  deploy-app:
+    name: helm upgrade (requires environment approval)
+    if: ${{ inputs.action == 'deploy-app' }}
+    runs-on: ubuntu-latest
+    environment: infra-apply
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      matrix:
+        region: [primary, secondary]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: "v3.16.1"
+
+      - name: Get AKS credentials
+        run: |
+          az aks get-credentials \
+            --name ${{ matrix.region == 'primary' && vars.AKS_PRIMARY_NAME || vars.AKS_SECONDARY_NAME }} \
+            --resource-group ${{ matrix.region == 'primary' && vars.RG_PRIMARY || vars.RG_SECONDARY }} \
+            --overwrite-existing
+
+      - name: helm upgrade --install
+        run: |
+          helm upgrade --install notes-api helm/notes-api \
+            -f helm/notes-api/values-${{ matrix.region }}.yaml \
+            --set image.repository=${{ vars.ACR_LOGIN_SERVER }}/notes-api \
+            --set image.tag=${{ github.sha }} \
+            --wait --timeout 5m

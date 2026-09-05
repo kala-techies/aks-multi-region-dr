@@ -1,0 +1,47 @@
+# Default values for notes-api. Override per-region with
+# helm upgrade --install -f values-primary.yaml / -f values-secondary.yaml.
+
+image:
+  repository: ""      # set to <acr-login-server>/notes-api
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+replicaCount: 1        # kept at 1: Standard_B2s single-node clusters have no room to spare (AD-005)
+
+region: "unspecified"  # surfaced by /healthz - set to "westeurope" or "northeurope"
+
+# Resource requests/limits are deliberately small - a single Standard_B2s
+# node (2 vCPU / 4 GiB) also has to run system pods (kube-proxy, CoreDNS,
+# CNI, metrics-server, etc.), leaving well under 2 vCPU / 4 GiB for workload
+# pods. See DECISIONS.md AD-005.
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+service:
+  type: LoadBalancer
+  port: 80
+  targetPort: 8000
+  # Set to the static azurerm_public_ip created by Terraform for this region
+  # (terraform output primary_ingress_ip / secondary_ingress_ip), so the
+  # address handed to Traffic Manager never changes across redeploys.
+  loadBalancerIP: ""
+  # Required alongside loadBalancerIP for AKS: the resource group the
+  # public IP actually lives in (the AKS node resource group).
+  resourceGroup: ""
+
+# Database connection. The URL itself (which contains the password) is
+# expected to come from a pre-existing Kubernetes Secret, NOT from Helm
+# values / --set / a committed values file. See templates/deployment.yaml
+# and docs/security.md.
+database:
+  existingSecretName: "notes-api-db-credentials"
+  existingSecretKey: "database-url"
+
+probes:
+  livenessPath: /healthz
+  readinessPath: /readyz

@@ -1,0 +1,11 @@
+notes-api ({{ .Values.region }}) deployed as release {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
+
+This chart expects a Secret named "{{ .Values.database.existingSecretName }}" with
+key "{{ .Values.database.existingSecretKey }}" to already exist in this namespace,
+holding the PostgreSQL connection string. Create it out-of-band, e.g.:
+
+  kubectl create secret generic {{ .Values.database.existingSecretName }} \
+    --from-literal={{ .Values.database.existingSecretKey }}="postgresql+psycopg://<user>:<password>@<host>:5432/<db>?sslmode=require"
+
+Never put the connection string in values.yaml or pass it via --set (it
+would land in shell history and Helm release metadata in plaintext).

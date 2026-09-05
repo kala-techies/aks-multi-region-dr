@@ -1,0 +1,11 @@
+# EXAMPLE FILE - copy to terraform.tfvars (which is gitignored) and fill in
+# real values. NEVER commit terraform.tfvars or put a real password here.
+
+name_prefix      = "notesdr"
+primary_region   = "westeurope"
+secondary_region = "northeurope"
+
+postgres_administrator_login    = "notesadmin"
+# Prefer: export TF_VAR_postgres_administrator_password="..." instead of
+# writing the real password into this file at all.
+postgres_administrator_password = "CHANGE_ME_use_TF_VAR_env_var_instead"
