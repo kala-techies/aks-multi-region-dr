@@ -1,4 +1,4 @@
-# Architecture (Phase 10 summary)
+# Architecture
 
 > This document describes the two-region AKS/DR architecture (`terraform/envs/dr-poc`),
 > currently parked pending the AD-005 vCPU-quota question. The active near-term

@@ -1,113 +1,169 @@
-# AKS Multi-Region DR (POC)
+# AKS Multi-Region DR
 
-A proof-of-concept Azure disaster-recovery architecture: an AKS cluster in
-West Europe (primary) and one in North Europe (secondary), a two-tier demo
-API backed by PostgreSQL Flexible Server with cross-region read replication,
-and Azure Traffic Manager for DNS-level failover between them.
+A disaster-recovery reference architecture on Azure, built around a real
+three-tier application: a static frontend, a FastAPI backend, and a managed
+PostgreSQL database. The end goal is an active-passive deployment across
+two Azure regions with automatic traffic failover; the path there runs
+through a working single-region deployment first, proven against real
+Azure infrastructure.
 
-**Status: implementation generated and locally/statically validated. No
-Azure resources have been created yet.** See `PROGRESS.md` for exactly
-what's been validated vs. what still needs a real Azure subscription.
+## What's here
 
-## Why this exists / how it's meant to be used
+**ResilientOps** — a service-health and incident-tracking application (the
+kind of internal tool that sits behind a public status page): services,
+incidents with a severity/status workflow, a per-incident update timeline,
+a derived overall-health summary, and metrics. It exists to give the
+infrastructure something real to run and fail over, not as a demo for its
+own sake.
 
-This repo follows a strict "generate everything, validate locally, don't
-touch Azure until told to" workflow — see `CLAUDE.md` for the full operating
-rules. If you're picking this project back up after a break, read
-**`PROGRESS.md`** and **`DECISIONS.md`** first; the filesystem is the source
-of truth for where things stand, not this README.
+| Tier | Implementation |
+|---|---|
+| Presentation | Static HTML/CSS/JS dashboard, served by nginx (`frontend/`) |
+| Application | FastAPI REST API (`app/`) — 17 automated tests |
+| Data | PostgreSQL (Azure Database for PostgreSQL Flexible Server in the cloud; SQLite for local development) |
 
-## Layout
+Each tier is its own container image and its own deployable unit.
+
+## Status
+
+The full stack has been **deployed to Azure and verified working from
+outside Azure** — a real resource group, container registry, managed
+PostgreSQL server, and running containers, reached over the public internet
+and confirmed responding correctly — then torn down deliberately once
+proven. That deployment used **Azure Container Instances** as a fast,
+low-cost way to validate the application end-to-end. The **multi-region
+AKS architecture** (the actual disaster-recovery target) is designed,
+written, and locally validated, but not yet deployed — see
+[Roadmap](#roadmap) below for why and what's next.
+
+Nothing is currently running in Azure. Redeploying either environment is a
+`terraform apply` away; see [Running this project](#running-this-project).
+
+## Architecture
 
 ```
-app/                 FastAPI "ResilientOps" backend - service health &
-                     incident tracker (Phase 2). Dockerfile (Phase 3).
-frontend/            Static HTML/CSS/JS presentation tier, nginx-served,
-                     its own Dockerfile - a separate deployable unit from
-                     the backend, making this a real 3-tier app.
+                    ┌───────────────────────────┐
+                    │      Azure Traffic Manager │
+                    │     (priority routing)     │
+                    └──────────────┬─────────────┘
+                    priority 1 ────┴──── priority 2
+                         │                    │
+                ┌────────▼────────┐  ┌────────▼────────┐
+                │   Region A      │  │   Region B      │
+                │   (primary)     │  │   (secondary)    │
+                │  AKS + frontend │  │  AKS + frontend  │
+                │  + backend pods │  │  + backend pods  │
+                └────────┬────────┘  └────────┬────────┘
+                         │                     │
+                ┌────────▼─────────┐  ┌────────▼─────────┐
+                │ PostgreSQL        │──▶│ PostgreSQL        │
+                │ Flexible Server   │   │ read replica      │
+                │ (primary, R/W)    │   │ (R/O until        │
+                └───────────────────┘   │  promoted)         │
+                                        └───────────────────┘
+```
+
+Full component breakdown, request flow, and every non-default design
+choice (with alternatives considered and the tradeoff accepted) are in
+[`docs/architecture.md`](docs/architecture.md) and [`DECISIONS.md`](DECISIONS.md).
+
+## Repository layout
+
+```
+app/                 FastAPI backend (ResilientOps). Dockerfile included.
+frontend/             Static dashboard, its own Dockerfile - a genuine
+                      presentation tier, not server-rendered from the backend.
 terraform/
-  modules/           network, aks, acr, postgresql, traffic-manager, aci
-  envs/dr-poc/       two-region AKS + DR architecture (Phase 4) - parked
-                     pending the AD-005 vCPU-quota question
-  envs/aci-poc/      single-region Azure Container Instances smoke test -
-                     the fastest path to "does this image actually run in
-                     Azure, reachable from the outside world"
-helm/resilientops/   Helm chart for the AKS path (backend tier only today -
-                     see its values.yaml)
-.github/
-  workflows/         ci.yml (safe, runs on every push), cd.yml (gated,
-                     AKS path), aci.yml (gated, ACI path)
-docs/                architecture, security, DR runbook, cost analysis,
-                     RTO/RPO methodology, troubleshooting,
-                     production-hardening, GitHub OIDC setup, validation
-                     checklist (Phases 7-10)
-PROGRESS.md          current phase, what's done, what's blocked, next steps
-DECISIONS.md         every non-default architecture choice, with
-                     alternatives considered and a POC-vs-production
-                     tradeoff for each
-CLAUDE.md            the operating rules this whole project follows
+  modules/            network, aks, acr, postgresql, traffic-manager, aci
+  envs/dr-poc/        two-region AKS + DR architecture (the production target)
+  envs/aci-poc/       single-region Container Instances environment (fast
+                      validation path, proven working - see PROGRESS.md)
+helm/resilientops/    Helm chart for the AKS path
+.github/workflows/    ci.yml (runs on every push), cd.yml + aci.yml (gated
+                      deploys), build-images.yml (image builds)
+docs/                 Architecture, security review, DR runbook, cost
+                      analysis, RTO/RPO methodology, troubleshooting,
+                      production-hardening guide, GitHub OIDC setup,
+                      validation checklist, engineering process
+PROGRESS.md           Current status: what's done, what's blocked, what's next
+DECISIONS.md          Every architecture decision, numbered, with reasoning,
+                      alternatives, and tradeoffs
 ```
 
-## Quick start (local, no Azure needed)
+## Running this project
 
-Backend:
+### Locally, no Azure account needed
+
 ```bash
+# Backend
 cd app
-python -m venv .venv
-.venv/Scripts/activate      # or: source .venv/bin/activate on Linux/macOS
+python -m venv .venv && .venv/Scripts/activate   # or source .venv/bin/activate
 pip install -r requirements-dev.txt
-pytest -v                    # 17 tests, SQLite in-memory, no external dependencies
+pytest -v                                         # 17 tests, SQLite, no external deps
 uvicorn resilientops.main:app --reload --app-dir src
-```
 
-Frontend (separate terminal, no build step):
-```bash
+# Frontend, in a second terminal
 cd frontend/public
 python -m http.server 5500
 ```
 
-Open http://127.0.0.1:5500 for the dashboard, or hit the API directly:
+Open http://127.0.0.1:5500 for the dashboard, or use the API directly:
 
 ```bash
 curl http://127.0.0.1:8000/healthz
-curl -X POST http://127.0.0.1:8000/services -H "X-API-Key: dev-local-only-change-me" -H "Content-Type: application/json" -d "{\"name\":\"checkout-api\"}"
+curl -X POST http://127.0.0.1:8000/services \
+  -H "X-API-Key: dev-local-only-change-me" -H "Content-Type: application/json" \
+  -d '{"name":"checkout-api"}'
 ```
 
-## Validating the infrastructure code (no Azure needed)
+### Validating the infrastructure code, no Azure account needed
 
 ```bash
-terraform -chdir=terraform/envs/dr-poc fmt -check
-terraform -chdir=terraform/envs/dr-poc init -backend=false
-terraform -chdir=terraform/envs/dr-poc validate
-
-terraform -chdir=terraform/envs/aci-poc init -backend=false
-terraform -chdir=terraform/envs/aci-poc validate
+terraform -chdir=terraform/envs/dr-poc  fmt -check && terraform -chdir=terraform/envs/dr-poc  init -backend=false && terraform -chdir=terraform/envs/dr-poc  validate
+terraform -chdir=terraform/envs/aci-poc init -backend=false && terraform -chdir=terraform/envs/aci-poc validate
 
 helm lint helm/resilientops
 helm template helm/resilientops --set image.repository=example.azurecr.io/resilientops-backend
 ```
 
-## What it would take to actually deploy this
+### Deploying to Azure
 
-**Fast path — Azure Container Instances (current focus):**
-1. Set up GitHub OIDC + environments per `docs/github-oidc-setup.md` (add the `ACI_ACR_NAME`/`ACI_ACR_LOGIN_SERVER` variables and `ACI_POSTGRES_ADMIN_PASSWORD`/`ACI_BACKEND_API_KEY` secrets it also documents).
-2. Run `.github/workflows/aci.yml` with `action: plan-only` to review the plan, then `action: apply` — gated behind the `infra-apply` environment's required reviewers.
-3. Open the frontend URL from the workflow's job summary and try it from outside Azure entirely.
-4. `action: destroy` when done testing - ACI bills continuously while running, unlike AKS's scale-to-zero-adjacent Free tier.
+**Single-region validation path (Azure Container Instances)** — the
+fastest way to see this running for real:
+1. Complete the one-time GitHub setup in [`docs/github-oidc-setup.md`](docs/github-oidc-setup.md).
+2. Run `.github/workflows/build-images.yml` to build and push both images.
+3. `terraform apply` (or `.github/workflows/aci.yml`) against `terraform/envs/aci-poc`.
+   **Important:** this subscription only permits resource creation in a
+   specific region (`centralindia` confirmed working; several others
+   confirmed blocked) — see `DECISIONS.md` AD-012 before picking a region.
+4. Test the resulting public URL, then `terraform destroy` when finished —
+   this environment bills continuously while it exists.
 
-**Full path — AKS multi-region DR (parked):**
-1. Read `DECISIONS.md` AD-001 (the app scope was assumed, not specified — confirm it's what you want) and AD-005 (the Free Trial vCPU quota risk — the biggest open question in this whole project).
-2. `az login`, then `az vm list-usage --location westeurope -o table` (and `northeurope`) to confirm real quota headroom.
-3. Copy `terraform/envs/dr-poc/terraform.tfvars.example` to `terraform.tfvars` (gitignored), fill in a real password via `TF_VAR_postgres_administrator_password` instead of the file.
-4. `terraform plan`, review it carefully, then — only with explicit sign-off — `terraform apply`.
-5. Use `.github/workflows/cd.yml` for image builds and `helm upgrade` deploys.
-6. When ready to test DR, follow `docs/dr-runbook.md` — and get explicit approval first, per its own instructions.
+**Multi-region AKS path** — the actual disaster-recovery target, not yet deployed:
+1. Read `DECISIONS.md` AD-005 and AD-012 — region and quota constraints on
+   this specific subscription need to be resolved before `terraform apply`
+   will succeed.
+2. Supply `terraform/envs/dr-poc/terraform.tfvars` (see the `.example`
+   file) with real values, review the plan, then apply.
+3. Deploy via `.github/workflows/cd.yml`.
+4. Follow `docs/dr-runbook.md` for the failover test itself.
 
-## Key architectural tradeoffs (see `DECISIONS.md` for the full reasoning)
+## Roadmap
 
-- Single Basic-tier ACR, no geo-replication (cost) — AD-004
-- PostgreSQL public network access + firewall allow-list, not a private endpoint (complexity/cost) — AD-003
-- Traffic Manager (DNS-level) instead of Front Door (cost) — AD-006
-- Free-tier AKS, single `Standard_B2s` node per cluster (Free Trial vCPU cap) — AD-005
-- Active-passive DR with manual/scripted database replica promotion, not active-active (the database technology doesn't support it) — AD-007
-- Azure Container Instances as an intermediate smoke-test environment, entirely separate from the AKS DR architecture — AD-010
+- [x] Application built and tested (backend + frontend, 3-tier)
+- [x] Infrastructure as code written for both the validation path and the DR target
+- [x] Single-region deployment proven against real Azure infrastructure
+- [ ] Resolve the region/quota constraints specific to this subscription (`DECISIONS.md` AD-005, AD-012) for the multi-region path
+- [ ] Deploy the two-region AKS architecture
+- [ ] Run and document the DR failover test (`docs/dr-runbook.md`)
+- [ ] Production-hardening pass (`docs/production-hardening.md`)
+
+## Key design decisions
+
+Full reasoning for each is in `DECISIONS.md`; summarized here:
+
+- PostgreSQL Flexible Server with a cross-region read replica for DR, promoted manually on failover (AD-003, AD-007)
+- Single Basic-tier container registry, no geo-replication, on cost grounds (AD-004)
+- Azure Traffic Manager (DNS-level failover) instead of Front Door, on cost grounds (AD-006)
+- Azure Container Instances as a separate, fast validation environment, independent of the AKS target (AD-010)
+- This subscription is restricted to a specific Azure region for resource creation, discovered by direct testing (AD-012)

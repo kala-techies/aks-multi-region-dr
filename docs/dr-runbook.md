@@ -1,8 +1,8 @@
-# DR runbook (Phase 8)
+# DR runbook
 
 Implements the pattern chosen in `DECISIONS.md` AD-007 (active-passive) and
-the test-safety requirements of AD-008 / project rule 19 (reversible
-simulation, never destructive). **Do not run the failover steps below
+the test-safety requirements of AD-008 (reversible
+simulation, never destructive — see `docs/engineering-process.md`). **Do not run the failover steps below
 against real infrastructure without the human owner's explicit approval for
 that specific test run — this is a human-approval-gated operation (project
 rule 18) even though it is designed to be reversible.**
@@ -40,7 +40,7 @@ rule 18) even though it is designed to be reversible.**
 3. **Observe Traffic Manager mark the primary Degraded** and start
    answering DNS queries with the secondary endpoint's address instead.
    Record the timestamp — this is the start of your RTO measurement window
-   (Phase 9).
+   (see `docs/rto-rpo-methodology.md`).
 
 4. **Promote the read replica to standalone read-write:**
    ```bash
@@ -68,12 +68,12 @@ rule 18) even though it is designed to be reversible.**
 6. **Measure recovery time** from the timestamp in step 3 to the first
    successful end-to-end request in step 5 — this is your observed RTO for
    this test run. Record it in `docs/rto-rpo-methodology.md`'s results
-   section (Phase 9).
+   section.
 
 ## Failback (restoring primary as the active region)
 
-This is the part most DR plans gloss over — be explicit about it, per
-project rule 8 (don't fake validation / don't hide compromises).
+This is the part most DR plans gloss over — be explicit about it instead
+(see `docs/engineering-process.md` on distinguishing validated from assumed).
 
 **Postgres Flexible Server replica promotion is one-way.** Once the
 secondary is promoted, it is a fully independent primary server; the
@@ -108,6 +108,7 @@ confident it's fully caught up.
 
 Steps 4 (promotion) and the failback rebuild are not wired into `cd.yml` as
 one-click jobs. They are destructive/irreversible-adjacent database
-operations gated by project rule 18 (human approval for database
-destructive operations, explicitly listing `FAILOVER`/`FAILBACK`) — they
+operations requiring explicit human approval (see `docs/engineering-process.md`,
+which lists failover/failback explicitly among database-destructive
+operations) — they
 must be run deliberately, by a human, watching the output.

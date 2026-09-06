@@ -3,10 +3,11 @@
 The workflows in `.github/workflows/cd.yml` authenticate to Azure using
 **OpenID Connect (OIDC) federated credentials** — no client secret is ever
 stored in GitHub. This document is the one-time setup a human must perform
-before `cd.yml` can run. None of it has been done by Claude: it requires
-creating real Azure AD (Entra ID) objects and GitHub repository settings,
-both of which are outside the "generate and validate locally" scope of the
-implementation phase (project rules 4 and 18).
+before `cd.yml` can run. It requires creating real Azure AD (Entra ID)
+objects and GitHub repository settings, both of which fall outside the
+"generate and validate locally" scope described in
+`docs/engineering-process.md` — they need repository-admin access and are
+done manually, once, by whoever administers this repository.
 
 ## 1. Create an Azure AD App Registration + federated credential
 
@@ -46,7 +47,7 @@ custom role with only the permissions Terraform actually needs, instead of
 subscription-wide Contributor. Contributor-on-subscription is a POC
 convenience.
 
-## 3. Configure the GitHub repository (requires repo admin — done by the user, not Claude)
+## 3. Configure the GitHub repository (requires repository admin access)
 
 In `kala-techies/aks-multi-region-dr` -> Settings:
 
@@ -59,7 +60,7 @@ In `kala-techies/aks-multi-region-dr` -> Settings:
   - `AZURE_CLIENT_ID` = the App Registration's Application (client) ID
   - `AZURE_TENANT_ID` = your Azure AD tenant ID
   - `AZURE_SUBSCRIPTION_ID` = the target subscription ID
-  - `ACR_NAME`, `ACR_LOGIN_SERVER` = from `terraform output` after Phase 4 apply
+  - `ACR_NAME`, `ACR_LOGIN_SERVER` = from `terraform output` after applying `envs/dr-poc`
   - `AKS_PRIMARY_NAME`, `AKS_SECONDARY_NAME`, `RG_PRIMARY`, `RG_SECONDARY` = from `terraform output`
 - **Secrets** (Actions -> Secrets, not Variables — these are sensitive):
   - `POSTGRES_ADMIN_PASSWORD` — used only by the `terraform-plan`/`terraform-apply`
@@ -88,8 +89,9 @@ environments' outputs never get cross-wired by accident:
 
 A traditional service-principal client secret is a long-lived credential
 that has to be rotated, can be copy-pasted, and is a stored bearer token —
-if `cd.yml` used one, it would violate project rule 5 ("never write secrets
-into GitHub workflow files"). OIDC federated credentials issue a
+if `cd.yml` used one, it would violate this project's own rule against
+writing secrets into GitHub workflow files (`docs/engineering-process.md`).
+OIDC federated credentials issue a
 short-lived token per workflow run, scoped to the exact repo/branch/environment
 subject configured above, and nothing secret is stored in GitHub at all for
 the Azure login step itself.

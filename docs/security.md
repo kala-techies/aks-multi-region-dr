@@ -1,9 +1,9 @@
-# Security review (Phase 7)
+# Security review
 
-Reviewed against what actually exists in this repo as of Phase 6
+Reviewed against what actually exists in this repo as of the CI/CD setup
 completion: the `app/` source, `terraform/` modules, `helm/` chart, and
-`.github/workflows/`. Each finding is framed as POC state / production
-recommendation per project rule 17 — nothing here is hidden or assumed away.
+`.github/workflows/`. Each finding is framed as current-state / production
+recommendation, consistent with `docs/engineering-process.md` — nothing here is hidden or assumed away.
 
 ## Secrets handling
 
@@ -37,7 +37,7 @@ recommendation per project rule 17 — nothing here is hidden or assumed away.
 
 | Area | POC implementation | Production recommendation |
 |---|---|---|
-| Dependency pinning | `app/requirements.txt` pins exact versions. | Add Dependabot (repo Settings — a GitHub remote-modification the user must enable, not Claude) for automated update PRs, and `pip-audit`/`safety` as a CI step. |
+| Dependency pinning | `app/requirements.txt` pins exact versions. | Add Dependabot (a repository setting, enabled manually via repo Settings) for automated update PRs, and `pip-audit`/`safety` as a CI step. |
 | Image provenance | `docker/build-push-action` tags images `:${{ github.sha }}` and `:latest`. | Add image signing (cosign) and vulnerability scanning (Trivy/Defender for Containers) as a CI gate before `build-and-push-image` pushes to ACR. |
 | Secret scanning | Relies on GitHub's default secret scanning (a repo setting, not something in this codebase). | Confirm it's enabled in repo Settings; add push protection. |
 

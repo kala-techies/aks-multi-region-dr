@@ -1,9 +1,9 @@
-# Troubleshooting guide (Phase 10)
+# Troubleshooting guide
 
 ## Local development (`app/`)
 
 **`pytest` fails with "no such table: notes"**
-Happened once during this project's own Phase 2 validation. Cause: SQLite
+Happened once during this project's own application validation. Cause: SQLite
 `:memory:` databases are per-connection; FastAPI's `TestClient` runs the app
 on a different thread than the test fixture, so without a shared connection
 each thread got its own empty database. Fixed in `app/tests/conftest.py` by
@@ -21,7 +21,7 @@ the app's virtualenv, rather than trying to get a source build's toolchain
 
 **Image build fails / `docker` not found**
 This was never actually validated in this project's development
-environment (no Docker on that machine — see PROGRESS.md Phase 3). If
+environment (no Docker on that machine — see PROGRESS.md). If
 `docker build app/` fails for you: check you're building from the repo
 root with `app` as context (not from inside `app/`), and that
 `app/.dockerignore` isn't excluding something the build needs (it excludes

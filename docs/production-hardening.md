@@ -1,4 +1,4 @@
-# Production-hardening recommendations (Phase 10 summary)
+# Production-hardening recommendations
 
 Consolidated from the POC-vs-production tables scattered through
 `DECISIONS.md` and `docs/security.md`, so there's one list to work from if

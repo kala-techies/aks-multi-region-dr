@@ -1,4 +1,4 @@
-# RTO / RPO methodology (Phase 9)
+# RTO / RPO methodology
 
 ## Definitions used in this project
 
@@ -31,8 +31,9 @@ Components this RTO includes, so the number isn't misleading:
 - DNS TTL (30s, `dns_config.ttl` in the Traffic Manager module) for any
   resolver that had already cached the primary's answer
 - Manual replica promotion time (human-executed, per the runbook — this is
-  typically the dominant term, and is **not** automated on purpose per
-  project rule 18)
+  typically the dominant term, and is **not** automated on purpose — see
+  `docs/engineering-process.md` on human-approval gates for database
+  operations)
 - Any manual Secret/redeploy step, if the design changes to require one
 
 ## RPO measurement method
@@ -45,15 +46,15 @@ Azure Monitor for the replica). The lag value at the moment of promotion
 **is** the RPO for that test run: any transaction committed on the primary
 within that lag window, but not yet streamed to the replica, is lost.
 
-**RPO = replication lag (seconds) at time of promotion, converted to "worst-case rows lost" by cross-referencing the Notes API's write rate during the test.**
+**RPO = replication lag (seconds) at time of promotion, converted to "worst-case rows lost" by cross-referencing the application's write rate during the test.**
 
 ## Results
 
 **NOT YET VALIDATED.** No failover test has been executed against real
-Azure infrastructure — Phase 4 has not been applied (per project rule 2,
-`terraform apply` requires explicit user go-ahead, and per AD-005 the vCPU
-quota question must be resolved first). This section is a placeholder to be
-filled in after a real `docs/dr-runbook.md` execution:
+Azure infrastructure — the multi-region environment (`envs/dr-poc`) has not
+been applied yet, pending the region and quota questions in `DECISIONS.md`
+AD-005/AD-012. This section is a placeholder to be filled in after a real
+`docs/dr-runbook.md` execution:
 
 | Test date | RTO observed | RPO observed | Notes |
 |---|---|---|---|
