@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ResilientOps</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+        <path d="M6 17h4.5l2-6 4 12 2.5-9 1.5 3H26" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div class="brand-text">
+        <span class="brand-name">ResilientOps</span>
+        <span class="brand-tag">service health &amp; incident tracker</span>
+      </div>
+    </div>
+    <div class="topbar-meta">
+      <span id="region-badge" class="badge badge-region">region: …</span>
+      <span id="last-updated" class="badge badge-updated">—</span>
+    </div>
+  </header>
+
+  <div id="status-banner" class="status-banner">
+    <span class="status-banner-icon" aria-hidden="true"></span>
+    <span id="status-banner-text" class="status-banner-text">Checking system status…</span>
+  </div>
+
+  <main class="layout">
+    <section class="stats-row" aria-label="System summary">
+      <div class="stat-tile">
+        <span class="stat-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        </span>
+        <div>
+          <span class="stat-value" id="stat-services">—</span>
+          <span class="stat-label">Services monitored</span>
+        </div>
+      </div>
+      <div class="stat-tile">
+        <span class="stat-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3z"/><line x1="12" y1="10" x2="12" y2="14.5"/><circle cx="12" cy="17.3" r="0.6" fill="var(--accent)" stroke="none"/></svg>
+        </span>
+        <div>
+          <span class="stat-value" id="stat-open">—</span>
+          <span class="stat-label">Open incidents</span>
+        </div>
+      </div>
+      <div class="stat-tile">
+        <span class="stat-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><line x1="3" y1="12" x2="21" y2="12"/></svg>
+        </span>
+        <div>
+          <span class="stat-value" id="stat-region">—</span>
+          <span class="stat-label">Serving region</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="Services">
+      <div class="panel-head">
+        <h2>Services</h2>
+        <button class="btn btn-ghost" id="btn-new-service">+ Register service</button>
+      </div>
+      <div id="services-list" class="services-grid"></div>
+    </section>
+
+    <section class="panel" aria-label="Incidents">
+      <div class="panel-head">
+        <h2>Incidents</h2>
+        <div class="filter-group" role="group" aria-label="Filter incidents">
+          <button class="filter-btn is-active" data-filter="all">All</button>
+          <button class="filter-btn" data-filter="open">Open</button>
+          <button class="filter-btn" data-filter="resolved">Resolved</button>
+        </div>
+        <button class="btn btn-primary" id="btn-new-incident">+ Report incident</button>
+      </div>
+      <div id="incidents-list" class="incidents-list"></div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span id="foot-meta">connecting to API…</span>
+  </footer>
+
+  <!-- API key gate (demo-only: write endpoints require X-API-Key) -->
+  <dialog id="key-dialog">
+    <form method="dialog" id="key-form">
+      <h3>Operator key required</h3>
+      <p class="dialog-hint">Write actions (registering a service, reporting an incident) need the API key. For this demo it's the backend's <code>API_KEY</code> env var.</p>
+      <input type="password" id="key-input" placeholder="X-API-Key" autocomplete="off">
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-ghost" id="key-cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save key</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="service-dialog">
+    <form id="service-form">
+      <h3>Register a service</h3>
+      <label>Name <input required name="name" placeholder="checkout-api"></label>
+      <label>Description <input name="description" placeholder="Handles cart checkout and payment capture"></label>
+      <label>Owner team <input name="owner_team" placeholder="payments"></label>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        <button type="submit" class="btn btn-primary">Create</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="incident-dialog">
+    <form id="incident-form">
+      <h3>Report an incident</h3>
+      <label>Service
+        <select required name="service_id" id="incident-service-select"></select>
+      </label>
+      <label>Title <input required name="title" placeholder="Elevated error rate on checkout"></label>
+      <label>Severity
+        <select name="severity">
+          <option value="low">Low</option>
+          <option value="medium" selected>Medium</option>
+          <option value="high">High</option>
+          <option value="critical">Critical</option>
+        </select>
+      </label>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        <button type="submit" class="btn btn-primary">Open incident</button>
+      </div>
+    </form>
+  </dialog>
+
+  <template id="incident-detail-template">
+    <div class="incident-updates"></div>
+    <form class="update-form">
+      <input required name="message" placeholder="Post a timeline update…">
+      <button type="submit" class="btn btn-ghost btn-sm">Post</button>
+    </form>
+    <div class="incident-actions"></div>
+  </template>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

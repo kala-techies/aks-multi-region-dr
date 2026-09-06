@@ -58,7 +58,7 @@ On a single-node `Standard_B2s` cluster, this is almost always insufficient
 CPU/memory left after system pods (CoreDNS, kube-proxy, CNI, metrics-server,
 etc.). Check with `kubectl describe pod <pod>` for `Insufficient cpu` /
 `Insufficient memory` events, and `kubectl top nodes` if metrics-server is
-available. Fix: lower `resources.requests` in `helm/notes-api/values.yaml`
+available. Fix: lower `resources.requests` in `helm/resilientops/values.yaml`
 further, or accept that this single-node POC cluster has very little
 headroom (a direct consequence of AD-005).
 
@@ -67,10 +67,10 @@ Usually one of: (a) the `AcrPull` role assignment hasn't propagated yet
 (can take a couple of minutes after `terraform apply`), (b) `image.repository`
 in the Helm values doesn't match `terraform output acr_login_server` exactly,
 or (c) the tag doesn't exist in ACR yet — confirm with `az acr repository
-show-tags --name <acr-name> --repository notes-api`.
+show-tags --name <acr-name> --repository resilientops-backend`.
 
 **`/readyz` returns 503**
-The app can't reach its PostgreSQL server. Check: the `notes-api-db-credentials`
+The app can't reach its PostgreSQL server. Check: the `resilientops-db-credentials`
 Secret exists in the right namespace and has the right connection string
 (host, port 5432, `sslmode=require`); the PostgreSQL firewall rule allows
 the connection (AD-003's `AllowAzureServices` rule should cover AKS's

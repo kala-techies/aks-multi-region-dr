@@ -1,8 +1,14 @@
-# Default values for notes-api. Override per-region with
+# Default values for resilientops. Override per-region with
 # helm upgrade --install -f values-primary.yaml / -f values-secondary.yaml.
+#
+# NOTE: this chart currently deploys the backend (application) tier only.
+# The frontend tier (frontend/) added alongside it does not have a Helm
+# template yet - see PROGRESS.md - so this is a 2-of-3 tiers deployment
+# on the AKS path today. The ACI path (terraform/envs/aci-poc) deploys
+# both tiers together.
 
 image:
-  repository: ""      # set to <acr-login-server>/notes-api
+  repository: ""      # set to <acr-login-server>/resilientops-backend
   tag: "latest"
   pullPolicy: IfNotPresent
 
@@ -34,13 +40,18 @@ service:
   # public IP actually lives in (the AKS node resource group).
   resourceGroup: ""
 
-# Database connection. The URL itself (which contains the password) is
-# expected to come from a pre-existing Kubernetes Secret, NOT from Helm
-# values / --set / a committed values file. See templates/deployment.yaml
-# and docs/security.md.
+# Database connection and the write-endpoint API key. Both values live in
+# the same pre-existing Kubernetes Secret, NOT in Helm values / --set / a
+# committed values file. See templates/deployment.yaml and docs/security.md.
 database:
-  existingSecretName: "notes-api-db-credentials"
+  existingSecretName: "resilientops-db-credentials"
   existingSecretKey: "database-url"
+
+apiKeySecretKey: "api-key"  # second key in the same Secret named above
+
+# CORS origins the frontend tier is served from. "*" is a POC convenience -
+# see docs/security.md.
+allowedOrigins: "*"
 
 probes:
   livenessPath: /healthz

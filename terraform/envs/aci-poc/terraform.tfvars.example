@@ -1,0 +1,13 @@
+# EXAMPLE FILE - copy to terraform.tfvars (gitignored) and fill in real
+# values, or better, export these as TF_VAR_* environment variables so
+# nothing sensitive ever touches disk as plaintext.
+
+name_prefix = "resopsaci"
+location    = "westeurope"
+
+postgres_administrator_login    = "resopsadmin"
+postgres_administrator_password = "CHANGE_ME_use_TF_VAR_env_var_instead"
+backend_api_key                 = "CHANGE_ME_use_TF_VAR_env_var_instead"
+
+frontend_image_tag = "latest"
+backend_image_tag  = "latest"

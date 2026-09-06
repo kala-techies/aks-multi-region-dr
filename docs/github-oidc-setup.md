@@ -66,6 +66,24 @@ In `kala-techies/aks-multi-region-dr` -> Settings:
     jobs via `TF_VAR_postgres_administrator_password`. Generate a strong
     password out-of-band; never derive it from anything checked into the repo.
 
+### For `.github/workflows/aci.yml` specifically (the ACI smoke-test path)
+
+Same federated credential and environments as above (this is one App
+Registration used by every workflow in this repo) — just a few more
+Variables/Secrets, kept separate from the AKS path's names so the two
+environments' outputs never get cross-wired by accident:
+
+- **Variables**: `ACI_ACR_NAME`, `ACI_ACR_LOGIN_SERVER` — from `terraform
+  output acr_login_server` after `envs/aci-poc` is first applied (chicken-
+  and-egg for the very first apply: leave these unset and the
+  `build-and-push-images` job's `az acr login` step will simply fail
+  informatively until they're filled in post-apply, or apply once by hand
+  first to bootstrap the ACR before wiring CI to it).
+- **Secrets**: `ACI_POSTGRES_ADMIN_PASSWORD`, `ACI_BACKEND_API_KEY` — same
+  handling as `POSTGRES_ADMIN_PASSWORD` above; the API key becomes the
+  value operators must supply in the frontend's "Operator key required"
+  dialog to exercise any write endpoint against the deployed instance.
+
 ## Why OIDC instead of a service principal secret
 
 A traditional service-principal client secret is a long-lived credential

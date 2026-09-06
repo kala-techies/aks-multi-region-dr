@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "notes-api.fullname" . }}
+  name: {{ include "resilientops.fullname" . }}
   labels:
-    {{- include "notes-api.labels" . | nindent 4 }}
+    {{- include "resilientops.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "notes-api.labels" . | nindent 6 }}
+      {{- include "resilientops.labels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "notes-api.labels" . | nindent 8 }}
+        {{- include "resilientops.labels" . | nindent 8 }}
     spec:
       containers:
-        - name: notes-api
+        - name: resilientops-backend
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
@@ -29,6 +29,13 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.database.existingSecretName }}
                   key: {{ .Values.database.existingSecretKey }}
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecretName }}
+                  key: {{ .Values.apiKeySecretKey }}
+            - name: ALLOWED_ORIGINS
+              value: {{ .Values.allowedOrigins | quote }}
           livenessProbe:
             httpGet:
               path: {{ .Values.probes.livenessPath }}

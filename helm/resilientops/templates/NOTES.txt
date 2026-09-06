@@ -1,0 +1,12 @@
+resilientops ({{ .Values.region }}) deployed as release {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
+
+This chart expects a Secret named "{{ .Values.database.existingSecretName }}" with
+keys "{{ .Values.database.existingSecretKey }}" and "{{ .Values.apiKeySecretKey }}" to
+already exist in this namespace. Create it out-of-band, e.g.:
+
+  kubectl create secret generic {{ .Values.database.existingSecretName }} \
+    --from-literal={{ .Values.database.existingSecretKey }}="postgresql+psycopg://<user>:<password>@<host>:5432/<db>?sslmode=require" \
+    --from-literal={{ .Values.apiKeySecretKey }}="<a-real-random-key-not-the-app-default>"
+
+Never put the connection string in values.yaml or pass it via --set (it
+would land in shell history and Helm release metadata in plaintext).

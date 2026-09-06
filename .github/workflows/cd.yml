@@ -127,14 +127,23 @@ jobs:
       - name: az acr login
         run: az acr login --name ${{ vars.ACR_NAME }}
 
-      - name: Build and push
+      - name: Build and push backend
         uses: docker/build-push-action@v6
         with:
           context: app
           push: true
           tags: |
-            ${{ vars.ACR_LOGIN_SERVER }}/notes-api:${{ github.sha }}
-            ${{ vars.ACR_LOGIN_SERVER }}/notes-api:latest
+            ${{ vars.ACR_LOGIN_SERVER }}/resilientops-backend:${{ github.sha }}
+            ${{ vars.ACR_LOGIN_SERVER }}/resilientops-backend:latest
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          push: true
+          tags: |
+            ${{ vars.ACR_LOGIN_SERVER }}/resilientops-frontend:${{ github.sha }}
+            ${{ vars.ACR_LOGIN_SERVER }}/resilientops-frontend:latest
 
   deploy-app:
     name: helm upgrade (requires environment approval)
@@ -169,8 +178,8 @@ jobs:
 
       - name: helm upgrade --install
         run: |
-          helm upgrade --install notes-api helm/notes-api \
-            -f helm/notes-api/values-${{ matrix.region }}.yaml \
-            --set image.repository=${{ vars.ACR_LOGIN_SERVER }}/notes-api \
+          helm upgrade --install resilientops helm/resilientops \
+            -f helm/resilientops/values-${{ matrix.region }}.yaml \
+            --set image.repository=${{ vars.ACR_LOGIN_SERVER }}/resilientops-backend \
             --set image.tag=${{ github.sha }} \
             --wait --timeout 5m

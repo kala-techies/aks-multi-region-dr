@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "notes-api.fullname" . }}
+  name: {{ include "resilientops.fullname" . }}
   labels:
-    {{- include "notes-api.labels" . | nindent 4 }}
+    {{- include "resilientops.labels" . | nindent 4 }}
   {{- if or .Values.service.loadBalancerIP .Values.service.resourceGroup }}
   annotations:
     {{- if .Values.service.resourceGroup }}
@@ -16,7 +16,7 @@ spec:
   loadBalancerIP: {{ .Values.service.loadBalancerIP }}
   {{- end }}
   selector:
-    {{- include "notes-api.labels" . | nindent 4 }}
+    {{- include "resilientops.labels" . | nindent 4 }}
   ports:
     - name: http
       port: {{ .Values.service.port }}

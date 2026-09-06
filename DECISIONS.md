@@ -132,3 +132,45 @@ Status values: `ASSUMPTION (needs user confirmation)`, `VERIFIED (docs)`, `UNVER
 **Reason:** OIDC avoids storing any Azure credential as a GitHub secret (project rule 5). Manual-approval environments satisfy the human-approval-gate rule (rule 18) at the CI level, not just in this chat.
 
 **Status:** Decision recorded; implementation in Phases 4–6.
+
+---
+
+## AD-001 addendum: application scope revised — "Notes API" replaced by "ResilientOps"
+
+**Decision:** The original AD-001 app (a bare CRUD "Notes API") was rejected by the user as "looking basic" — not representative of a real system. It was fully replaced by **ResilientOps**, a service-health & incident tracker: `Service` and `Incident` resources, a severity/status workflow (`investigating → identified → monitoring → resolved`), a per-incident `IncidentUpdate` timeline, a derived `/status` summary endpoint (the same idea as a public status-page banner), shared-secret API-key auth on write endpoints, and Prometheus-format `/metrics`.
+
+**Reason:** Thematically apt for a DR project (it's a tool for tracking outages, itself made resilient), and exercises real domain modeling (relationships, a state machine, derived computation) instead of flat CRUD — while remaining small enough to build and test in one session.
+
+**Tradeoff:** More code than the original design; still not a "real" production incident-management tool (no pagination cursor stability guarantees, no rate limiting, no multi-tenant scoping) — appropriately scoped for a demo workload, not a rewrite of PagerDuty.
+
+**Status:** LOCALLY VALIDATED — 17/17 tests pass (`app/tests/`). Supersedes AD-001's tech-stack assumption only insofar as the domain changed; FastAPI + SQLAlchemy + PostgreSQL Flexible Server stays as originally decided.
+
+---
+
+## AD-010: Frontend tier, and Azure Container Instances as a smoke-test environment
+
+**Decision:** Two related additions, requested together: (1) a genuine presentation tier — `frontend/`, static HTML/CSS/vanilla JS served by `nginx-unprivileged`, its own container/Dockerfile, calling the backend over HTTP with CORS enabled — making this a real 3-tier architecture rather than an API with a docs page; and (2) a new, self-contained Terraform environment (`terraform/envs/aci-poc`) that deploys both tiers plus a single (non-replicated) PostgreSQL Flexible Server to a single Azure Container Instances group, as the fastest possible path to answering "does this image actually run and serve traffic in Azure, reachable from the outside world" — before committing further effort to the AKS multi-region path.
+
+**Reason:** The user's own framing: "an image is an image if it runs on the Azure Container Instance or anywhere" — i.e., prove the containers work in Azure cheaply and quickly, decoupled from the AKS vCPU-quota question (AD-005) that was already blocking that path. ACI's vCPU quota is a separate resource-provider quota family (`Microsoft.ContainerInstance`) from the AKS node pool's VM quota (`Microsoft.Compute`), so this environment sidesteps AD-005 entirely rather than needing it resolved first.
+
+**Design choices specific to this environment, each a deliberate departure from the AKS path's equivalent choice:**
+- **Both containers in one `azurerm_container_group`**, sharing one public IP, each on its own port (backend `:8000`, frontend `:8080`) — no ingress, no path-based routing, no TLS. Simplest possible topology for a smoke test; not how the AKS path is or should be built.
+- **ACR admin account enabled** (`admin_enabled = true`, a new variable added to `modules/acr`, defaulted to `false` so the AKS/`dr-poc` environment's existing managed-identity approach is unaffected) — Container Instances' support for pulling images via managed identity is more limited/newer than AKS's `AcrPull` role-assignment pattern; admin credentials, passed as Terraform-managed secure environment variables, are the simpler, well-documented path for this specific, short-lived rig.
+- **Single PostgreSQL server, no replica** — this environment is not exercising DR at all, just "does the app run"; a replica would be pure cost with no purpose here.
+- **The frontend's `FRONTEND_API_BASE_URL` is computed from the container group's predictable FQDN** (`<dns_name_label>.<location>.azurecontainer.io`) rather than waited-on as a `terraform output`, avoiding a circular dependency between the two containers in the same apply.
+
+**Tradeoff:** None of this environment's choices are meant to carry forward into the AKS path — it is explicitly a disposable, run-then-`destroy` rig (ACI bills continuously while the container group exists; there's no scale-to-zero). Documented here so nobody mistakes ACR admin-account usage or the single-container-group topology for this project's actual security/architecture position, which remains what AD-003 through AD-009 already describe.
+
+**Status:** STATICALLY VALIDATED (`terraform fmt`, `terraform validate`). NOT YET AZURE VALIDATED — nothing has been applied.
+
+**Production recommendation:** N/A — there is no production recommendation for this environment because it isn't a production candidate. The production path for this workload is, and remains, `terraform/modules/aks`.
+
+---
+
+## AD-011: AKS multi-region DR path — parked, not abandoned
+
+**Decision:** Work on `terraform/envs/dr-poc` (the two-region AKS/Traffic Manager/PostgreSQL-replica architecture from AD-002 through AD-009) is paused while the ACI smoke-test path (AD-010) is pursued instead. Nothing about the AKS design has changed or been reconsidered — it remains statically validated and unblocked except for AD-005's vCPU-quota question.
+
+**Reason:** User direction: prove the application works as a real Azure workload via the cheaper, faster, quota-unconstrained path first; return to the full DR architecture afterward. This is a sequencing decision, not a scope cut.
+
+**Status:** `terraform/envs/dr-poc` and `helm/resilientops` continue to be kept in sync with app changes (e.g., the Helm chart's Deployment template was updated for the new `API_KEY`/`ALLOWED_ORIGINS` env vars in the same session this was parked) so that resuming it later doesn't mean resuming it *stale*.

@@ -3,7 +3,7 @@ from collections.abc import Generator
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-from notes_api.config import settings
+from resilientops.config import settings
 
 
 class Base(DeclarativeBase):

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: resilientops
+description: Service health & incident tracker (FastAPI + PostgreSQL backend, static frontend tier) used to exercise the AKS multi-region DR architecture.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

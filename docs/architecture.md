@@ -1,5 +1,11 @@
 # Architecture (Phase 10 summary)
 
+> This document describes the two-region AKS/DR architecture (`terraform/envs/dr-poc`),
+> currently parked pending the AD-005 vCPU-quota question. The active near-term
+> deployment target is the single-region Azure Container Instances smoke test
+> (`terraform/envs/aci-poc`, AD-010) - a deliberately simpler rig with no
+> multi-region concerns, described in `DECISIONS.md` rather than diagrammed here.
+
 ## Overview
 
 ```
@@ -15,7 +21,8 @@
                  │                 │      │                 │
                  │  AKS (Free tier)│      │  AKS (Free tier)│
                  │  1x B2s node    │      │  1x B2s node    │
-                 │  notes-api pod  │      │  notes-api pod  │
+                 │  resilientops   │      │  resilientops   │
+                 │  backend pod    │      │  backend pod    │
                  │  Static Public  │      │  Static Public  │
                  │  IP (LB Svc)    │      │  IP (LB Svc)    │
                  └────────┬────────┘      └────────┬────────┘
@@ -50,7 +57,7 @@
 ## Data flow (steady state)
 
 1. Client resolves `<profile>.trafficmanager.net` -> Traffic Manager returns the West Europe static IP (priority 1, healthy).
-2. Client hits the West Europe `notes-api` Service (`LoadBalancer`, static IP) -> pod.
+2. Client hits the West Europe `resilientops` Service (`LoadBalancer`, static IP) -> pod.
 3. Pod reads `DATABASE_URL` from its region's Kubernetes Secret -> connects to the West Europe PostgreSQL primary.
 4. The North Europe replica continuously streams from the primary in the background; its own AKS deployment is up and serving from its own (read-only) copy would fail writes if it ever received traffic in this state — it doesn't, because Traffic Manager routes 100% of traffic to priority 1 while healthy.
 

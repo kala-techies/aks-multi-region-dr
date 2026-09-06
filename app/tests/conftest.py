@@ -4,8 +4,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from notes_api.database import Base, get_db
-from notes_api.main import app
+from resilientops.config import settings
+from resilientops.database import Base, get_db
+from resilientops.main import app
+
+API_KEY = settings.api_key  # the default dev key - known to tests, never a real secret
 
 
 @pytest.fixture()
@@ -31,3 +34,8 @@ def client():
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def auth_headers():
+    return {"X-API-Key": API_KEY}

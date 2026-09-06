@@ -40,16 +40,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build image (no push)
+      - name: Build backend image (no push)
         uses: docker/build-push-action@v6
         with:
           context: app
           push: false
-          tags: notes-api:ci
+          tags: resilientops-backend:ci
+
+      - name: Build frontend image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          push: false
+          tags: resilientops-frontend:ci
 
   terraform-validate:
     name: Terraform fmt & validate
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env_dir: [terraform/envs/dr-poc, terraform/envs/aci-poc]
     steps:
       - uses: actions/checkout@v4
 
@@ -61,11 +71,11 @@ jobs:
         run: terraform fmt -check -recursive terraform/
 
       - name: terraform init (no backend, no credentials needed)
-        working-directory: terraform/envs/dr-poc
+        working-directory: ${{ matrix.env_dir }}
         run: terraform init -backend=false -input=false
 
       - name: terraform validate
-        working-directory: terraform/envs/dr-poc
+        working-directory: ${{ matrix.env_dir }}
         run: terraform validate
 
   helm-lint:
@@ -79,10 +89,10 @@ jobs:
           version: "v3.16.1"
 
       - name: helm lint
-        run: helm lint helm/notes-api
+        run: helm lint helm/resilientops
 
       - name: helm template (sanity render)
         run: |
-          helm template ci helm/notes-api \
-            --set image.repository=example.azurecr.io/notes-api \
+          helm template ci helm/resilientops \
+            --set image.repository=example.azurecr.io/resilientops-backend \
             --set image.tag=ci

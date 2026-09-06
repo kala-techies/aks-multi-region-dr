@@ -17,7 +17,7 @@ rule 18) even though it is designed to be reversible.**
   Manager priority 2 (idle — receives no traffic while priority 1 is
   healthy). PostgreSQL read replica continuously streaming from the primary,
   read-only, lag typically small but not bounded (AD-003).
-- **Important:** the secondary app's `notes-api-db-credentials` Secret
+- **Important:** the secondary app's `resilientops-db-credentials` Secret
   already points at the *replica's own* FQDN (`psql-<prefix>-sec-<suffix>.postgres.database.azure.com`),
   not the primary's. This is deliberate — it means failover does **not**
   require editing the secondary's connection string; promoting the replica
@@ -30,7 +30,7 @@ rule 18) even though it is designed to be reversible.**
    traffic for the test's duration.
 
 2. **Simulate the failure** (reversible — pick one):
-   - `kubectl --context <primary> scale deployment/notes-api --replicas=0`, or
+   - `kubectl --context <primary> scale deployment/resilientops --replicas=0`, or
    - Disable the primary endpoint in the Traffic Manager profile (Azure
      Portal, or `az network traffic-manager endpoint update --endpoint-status Disabled ...`
      — **UNVERIFIED exact flag names**: confirm against `az network

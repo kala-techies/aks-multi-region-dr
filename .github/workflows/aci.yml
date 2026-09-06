@@ -1,0 +1,197 @@
+name: ACI smoke-test deploy (manual, gated)
+
+# Deploys the ResilientOps frontend + backend to a single Azure Container
+# Instances group, backed by a real PostgreSQL Flexible Server (PaaS) - the
+# fastest path to "does this image actually run and serve traffic in
+# Azure, reachable from the outside world" before committing to the full
+# AKS multi-region path (terraform/envs/dr-poc, see cd.yml).
+#
+# Same rules as cd.yml: workflow_dispatch-only, every Azure-touching job
+# targets a GitHub Environment with required reviewers, OIDC only (no
+# stored Azure credential). See docs/github-oidc-setup.md.
+#
+# Per this project's own rules: do not run the "apply" job until the human
+# owner has explicitly said to proceed with this deployment.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "What to run"
+        required: true
+        type: choice
+        options:
+          - plan-only
+          - apply
+          - destroy
+
+permissions:
+  contents: read
+
+env:
+  TF_WORKING_DIR: terraform/envs/aci-poc
+
+jobs:
+  build-and-push-images:
+    name: Build and push both images to ACR
+    if: ${{ inputs.action == 'apply' }}
+    runs-on: ubuntu-latest
+    environment: infra-plan
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: az acr login
+        run: az acr login --name ${{ vars.ACI_ACR_NAME }}
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: app
+          push: true
+          tags: |
+            ${{ vars.ACI_ACR_LOGIN_SERVER }}/resilientops-backend:${{ github.sha }}
+            ${{ vars.ACI_ACR_LOGIN_SERVER }}/resilientops-backend:latest
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          push: true
+          tags: |
+            ${{ vars.ACI_ACR_LOGIN_SERVER }}/resilientops-frontend:${{ github.sha }}
+            ${{ vars.ACI_ACR_LOGIN_SERVER }}/resilientops-frontend:latest
+
+  terraform-plan:
+    name: Terraform plan
+    needs: [build-and-push-images]
+    # build-and-push-images only runs for 'apply' (see its own `if`), so
+    # this job's condition re-checks explicitly rather than relying on
+    # `needs` alone, which would otherwise skip 'plan-only' entirely.
+    if: |
+      always() &&
+      (inputs.action == 'plan-only' || needs.build-and-push-images.result == 'success')
+    runs-on: ubuntu-latest
+    environment: infra-plan
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: terraform init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init -input=false
+
+      - name: terraform plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        env:
+          TF_VAR_postgres_administrator_password: ${{ secrets.ACI_POSTGRES_ADMIN_PASSWORD }}
+          TF_VAR_backend_api_key: ${{ secrets.ACI_BACKEND_API_KEY }}
+          TF_VAR_backend_image_tag: ${{ inputs.action == 'apply' && github.sha || 'latest' }}
+          TF_VAR_frontend_image_tag: ${{ inputs.action == 'apply' && github.sha || 'latest' }}
+        run: terraform plan -input=false -out=tfplan
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aci-tfplan
+          path: ${{ env.TF_WORKING_DIR }}/tfplan
+          retention-days: 5
+
+  terraform-apply:
+    name: Terraform apply (requires environment approval)
+    if: ${{ inputs.action == 'apply' }}
+    needs: terraform-plan
+    runs-on: ubuntu-latest
+    # This environment MUST have required reviewers configured - the
+    # human-approval gate for a real infrastructure change (project rule 18).
+    environment: infra-apply
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: aci-tfplan
+          path: ${{ env.TF_WORKING_DIR }}
+
+      - name: terraform init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init -input=false
+
+      - name: terraform apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform apply -input=false -auto-approve tfplan
+
+      - name: Print public URLs
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          echo "## ResilientOps is live" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Frontend: $(terraform output -raw frontend_url)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Backend API docs: $(terraform output -raw backend_docs_url)" >> "$GITHUB_STEP_SUMMARY"
+
+  terraform-destroy:
+    name: Terraform destroy (requires environment approval)
+    if: ${{ inputs.action == 'destroy' }}
+    runs-on: ubuntu-latest
+    # Destroying this smoke-test environment is still a real Azure change -
+    # same approval gate as apply (project rule 18: "Azure resource
+    # deletion" requires explicit human approval).
+    environment: infra-apply
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: terraform init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init -input=false
+
+      - name: terraform destroy
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        env:
+          TF_VAR_postgres_administrator_password: ${{ secrets.ACI_POSTGRES_ADMIN_PASSWORD }}
+          TF_VAR_backend_api_key: ${{ secrets.ACI_BACKEND_API_KEY }}
+        run: terraform destroy -input=false -auto-approve

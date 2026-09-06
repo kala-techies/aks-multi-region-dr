@@ -21,7 +21,7 @@ repo's history.
 - [ ] AZURE VALIDATED — nothing applied. Per project rule 2, `terraform apply` requires explicit user approval and has not been requested yet.
 
 ## Helm (Phase 5)
-- [x] LOCALLY VALIDATED — `helm lint helm/notes-api` → 0 charts failed.
+- [x] LOCALLY VALIDATED — `helm lint helm/resilientops` → 0 charts failed.
 - [x] LOCALLY VALIDATED — `helm template` renders correctly with default values and with `values-primary.yaml` + `--set service.loadBalancerIP=... --set service.resourceGroup=...` (annotation confirmed present).
 - [ ] NOT YET VALIDATED — actual `helm upgrade --install` against a real AKS cluster (requires Phase 4 to be applied first).
 
