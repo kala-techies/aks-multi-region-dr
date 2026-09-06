@@ -12,6 +12,8 @@ __pycache__/
 *.tfvars
 !*.tfvars.example
 crash.log
+tfplan*
+*.tfplan
 # .terraform.lock.hcl is intentionally NOT ignored - commit it for reproducible providers
 
 # Helm
