@@ -1,0 +1,50 @@
+name: Build & push ResilientOps images (ACI smoke test)
+
+# Narrow, ungated workflow: builds both images and pushes them to the
+# aci-poc ACR using its admin credentials. Does not touch any Azure
+# infrastructure (no terraform, no az login) - only reason this exists is
+# that this environment's Windows machine has no Docker and Azure disallows
+# both ACR Tasks (cloud build) and, for this subscription, most regions for
+# real resource creation. GitHub's hosted runners have Docker built in.
+#
+# Uses ACR admin credentials (not OIDC) deliberately - see DECISIONS.md
+# AD-010: this specific ACR already has admin_enabled=true for exactly this
+# reason. Once images exist in the registry, terraform apply for
+# terraform/envs/aci-poc can create the container group referencing them.
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Tag to build and push"
+        required: false
+        default: "latest"
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.ACI_ACR_LOGIN_SERVER }}
+          username: ${{ vars.ACI_ACR_ADMIN_USERNAME }}
+          password: ${{ secrets.ACI_ACR_ADMIN_PASSWORD }}
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: app
+          push: true
+          tags: ${{ vars.ACI_ACR_LOGIN_SERVER }}/resilientops-backend:${{ inputs.image_tag }}
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          push: true
+          tags: ${{ vars.ACI_ACR_LOGIN_SERVER }}/resilientops-frontend:${{ inputs.image_tag }}
